@@ -58,11 +58,11 @@ static const NWidgetPart _nested_land_info_widgets[] = {
 	NWidget(WWT_PANEL, COLOUR_GREY, WID_LI_BACKGROUND), EndContainer(),
 };
 
-static WindowDesc _land_info_desc(
-	WDP_AUTO, "land_info", 0, 0,
+static WindowDesc _land_info_desc(__FILE__, __LINE__,
+	WDP_AUTO, nullptr, 0, 0,
 	WC_LAND_INFO, WC_NONE,
 	0,
-	_nested_land_info_widgets, lengthof(_nested_land_info_widgets)
+	std::begin(_nested_land_info_widgets), std::end(_nested_land_info_widgets)
 );
 
 class LandInfoWindow : public Window {
@@ -72,14 +72,14 @@ class LandInfoWindow : public Window {
 public:
 	TileIndex tile;
 
-	void DrawWidget(const Rect &r, int widget) const override
+	void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
 		if (widget != WID_LI_BACKGROUND) return;
 
 		Rect ir = r.Shrink(WidgetDimensions::scaled.frametext);
 		for (size_t i = 0; i < this->landinfo_data.size(); i++) {
 			DrawString(ir, this->landinfo_data[i], i == 0 ? TC_LIGHT_BLUE : TC_FROMSTRING, SA_HOR_CENTER);
-			ir.top += FONT_HEIGHT_NORMAL + (i == 0 ? WidgetDimensions::scaled.vsep_wide : WidgetDimensions::scaled.vsep_normal);
+			ir.top += GetCharacterHeight(FS_NORMAL) + (i == 0 ? WidgetDimensions::scaled.vsep_wide : WidgetDimensions::scaled.vsep_normal);
 		}
 
 		if (!this->cargo_acceptance.empty()) {
@@ -88,7 +88,7 @@ public:
 		}
 	}
 
-	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
 	{
 		if (widget != WID_LI_BACKGROUND) return;
 
@@ -97,7 +97,7 @@ public:
 			uint width = GetStringBoundingBox(this->landinfo_data[i]).width + WidgetDimensions::scaled.frametext.Horizontal();
 			size->width = std::max(size->width, width);
 
-			size->height += FONT_HEIGHT_NORMAL + (i == 0 ? WidgetDimensions::scaled.vsep_wide : WidgetDimensions::scaled.vsep_normal);
+			size->height += GetCharacterHeight(FS_NORMAL) + (i == 0 ? WidgetDimensions::scaled.vsep_wide : WidgetDimensions::scaled.vsep_normal);
 		}
 
 		if (!this->cargo_acceptance.empty()) {
@@ -138,7 +138,7 @@ public:
 		/* Because build_date is not set yet in every TileDesc, we make sure it is empty */
 		TileDesc td;
 
-		td.build_date = INVALID_DATE;
+		td.build_date = CalendarTime::INVALID_DATE;
 
 		/* Most tiles have only one owner, but
 		 *  - drivethrough roadstops can be build on town owned roads (up to 2 owners) and
@@ -207,7 +207,7 @@ public:
 
 		/* Location */
 		std::stringstream tile_ss;
-		tile_ss << "0x" << std::setfill('0') << std::setw(4) << std::hex << std::uppercase << tile; // 0x%.4X
+		tile_ss << "0x" << std::setfill('0') << std::setw(4) << std::hex << std::uppercase << tile.base(); // 0x%.4X
 
 		SetDParam(0, TileX(tile));
 		SetDParam(1, TileY(tile));
@@ -224,7 +224,7 @@ public:
 		this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_LOCAL_AUTHORITY));
 
 		/* Build date */
-		if (td.build_date != INVALID_DATE) {
+		if (td.build_date != CalendarTime::INVALID_DATE) {
 			SetDParam(0, td.build_date);
 			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_BUILD_DATE));
 		}
@@ -306,19 +306,20 @@ public:
 		line << GetString(STR_LAND_AREA_INFORMATION_CARGO_ACCEPTED);
 
 		bool found = false;
-		for (CargoID i = 0; i < NUM_CARGO; ++i) {
-			if (acceptance[i] > 0) {
+		for (const CargoSpec *cs : _sorted_cargo_specs) {
+			CargoID cid = cs->Index();
+			if (acceptance[cid] > 0) {
 				/* Add a comma between each item. */
 				if (found) line << ", ";
 				found = true;
 
 				/* If the accepted value is less than 8, show it in 1/8:ths */
-				if (acceptance[i] < 8) {
-					SetDParam(0, acceptance[i]);
-					SetDParam(1, CargoSpec::Get(i)->name);
+				if (acceptance[cid] < 8) {
+					SetDParam(0, acceptance[cid]);
+					SetDParam(1, cs->name);
 					line << GetString(STR_LAND_AREA_INFORMATION_CARGO_EIGHTS);
 				} else {
-					line << GetString(CargoSpec::Get(i)->name);
+					line << GetString(cs->name);
 				}
 			}
 		}
@@ -331,15 +332,15 @@ public:
 
 	bool IsNewGRFInspectable() const override
 	{
-		return ::IsNewGRFInspectable(GetGrfSpecFeature(this->tile), this->tile);
+		return ::IsNewGRFInspectable(GetGrfSpecFeature(this->tile), this->tile.base());
 	}
 
 	void ShowNewGRFInspectWindow() const override
 	{
-		::ShowNewGRFInspectWindow(GetGrfSpecFeature(this->tile), this->tile);
+		::ShowNewGRFInspectWindow(GetGrfSpecFeature(this->tile), this->tile.base());
 	}
 
-	void OnClick(Point pt, int widget, int click_count) override
+	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
 	{
 		switch (widget) {
 			case WID_LI_LOCATION:
@@ -357,7 +358,7 @@ public:
 	 * @param data Information about the changed data.
 	 * @param gui_scope Whether the call is done from GUI scope. You may not do everything when not in GUI scope. See #InvalidateWindowData() for details.
 	 */
-	void OnInvalidateData(int data = 0, bool gui_scope = true) override
+	void OnInvalidateData([[maybe_unused]] int data = 0, [[maybe_unused]] bool gui_scope = true) override
 	{
 		if (!gui_scope) return;
 
@@ -392,11 +393,11 @@ static const NWidgetPart _nested_about_widgets[] = {
 	EndContainer(),
 };
 
-static WindowDesc _about_desc(
+static WindowDesc _about_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_GAME_OPTIONS, WC_NONE,
 	0,
-	_nested_about_widgets, lengthof(_nested_about_widgets)
+	std::begin(_nested_about_widgets), std::end(_nested_about_widgets)
 );
 
 static const char * const _credits[] = {
@@ -477,17 +478,17 @@ struct AboutWindow : public Window {
 		this->text_position = this->GetWidget<NWidgetBase>(WID_A_SCROLLING_TEXT)->pos_y + this->GetWidget<NWidgetBase>(WID_A_SCROLLING_TEXT)->current_y;
 	}
 
-	void SetStringParameters(int widget) const override
+	void SetStringParameters(WidgetID widget) const override
 	{
 		if (widget == WID_A_WEBSITE) SetDParamStr(0, "Website: https://www.openttd.org");
 		if (widget == WID_A_COPYRIGHT) SetDParamStr(0, _openttd_revision_year);
 	}
 
-	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
 	{
 		if (widget != WID_A_SCROLLING_TEXT) return;
 
-		this->line_height = FONT_HEIGHT_NORMAL;
+		this->line_height = GetCharacterHeight(FS_NORMAL);
 
 		Dimension d;
 		d.height = this->line_height * num_visible_lines;
@@ -499,7 +500,7 @@ struct AboutWindow : public Window {
 		*size = maxdim(*size, d);
 	}
 
-	void DrawWidget(const Rect &r, int widget) const override
+	void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
 		if (widget != WID_A_SCROLLING_TEXT) return;
 
@@ -517,9 +518,9 @@ struct AboutWindow : public Window {
 	/**
 	 * Scroll the text in the about window slow.
 	 *
-	 * The interval of 2100ms is chosen to maintain parity: 2100 / FONT_HEIGHT_NORMAL = 150ms.
+	 * The interval of 2100ms is chosen to maintain parity: 2100 / GetCharacterHeight(FS_NORMAL) = 150ms.
 	 */
-	IntervalTimer<TimerWindow> scroll_interval = {std::chrono::milliseconds(2100) / FONT_HEIGHT_NORMAL, [this](uint count) {
+	IntervalTimer<TimerWindow> scroll_interval = {std::chrono::milliseconds(2100) / GetCharacterHeight(FS_NORMAL), [this](uint count) {
 		this->text_position -= count;
 		/* If the last text has scrolled start a new from the start */
 		if (this->text_position < (int)(this->GetWidget<NWidgetBase>(WID_A_SCROLLING_TEXT)->pos_y - lengthof(_credits) * this->line_height)) {
@@ -573,7 +574,7 @@ void ShowCostOrIncomeAnimation(int x, int y, int z, Money cost)
 		msg = STR_INCOME_FLOAT_INCOME;
 	}
 	SetDParam(0, cost);
-	AddTextEffect(msg, pt.x, pt.y, DAY_TICKS, TE_RISING);
+	AddTextEffect(msg, pt.x, pt.y, Ticks::DAY_TICKS, TE_RISING);
 }
 
 /**
@@ -590,7 +591,7 @@ void ShowFeederIncomeAnimation(int x, int y, int z, Money transfer, Money income
 
 	SetDParam(0, transfer);
 	if (income == 0) {
-		AddTextEffect(STR_FEEDER, pt.x, pt.y, DAY_TICKS, TE_RISING);
+		AddTextEffect(STR_FEEDER, pt.x, pt.y, Ticks::DAY_TICKS, TE_RISING);
 	} else {
 		StringID msg = STR_FEEDER_COST;
 		if (income < 0) {
@@ -598,7 +599,7 @@ void ShowFeederIncomeAnimation(int x, int y, int z, Money transfer, Money income
 			msg = STR_FEEDER_INCOME;
 		}
 		SetDParam(1, income);
-		AddTextEffect(msg, pt.x, pt.y, DAY_TICKS, TE_RISING);
+		AddTextEffect(msg, pt.x, pt.y, Ticks::DAY_TICKS, TE_RISING);
 	}
 }
 
@@ -611,7 +612,7 @@ void ShowFeederIncomeAnimation(int x, int y, int z, Money transfer, Money income
  * @param string  String which is drawn on the map.
  * @return        TextEffectID to be used for future updates of the loading indicators.
  */
-TextEffectID ShowFillingPercent(int x, int y, int z, uint8 percent, StringID string)
+TextEffectID ShowFillingPercent(int x, int y, int z, uint8_t percent, StringID string)
 {
 	Point pt = RemapCoords(x, y, z);
 
@@ -626,7 +627,7 @@ TextEffectID ShowFillingPercent(int x, int y, int z, uint8 percent, StringID str
  * @param te_id   TextEffectID to be updated.
  * @param string  String which is printed.
  */
-void UpdateFillingPercent(TextEffectID te_id, uint8 percent, StringID string)
+void UpdateFillingPercent(TextEffectID te_id, uint8_t percent, StringID string)
 {
 	assert(string != STR_NULL);
 
@@ -647,14 +648,14 @@ void HideFillingPercent(TextEffectID *te_id)
 }
 
 static const NWidgetPart _nested_tooltips_widgets[] = {
-	NWidget(WWT_EMPTY, INVALID_COLOUR, WID_TT_BACKGROUND), EndContainer(),
+	NWidget(WWT_EMPTY, INVALID_COLOUR, WID_TT_BACKGROUND),
 };
 
-static WindowDesc _tool_tips_desc(
+static WindowDesc _tool_tips_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0, // Coordinates and sizes are not used,
 	WC_TOOLTIPS, WC_NONE,
 	WDF_NO_FOCUS | WDF_NO_CLOSE,
-	_nested_tooltips_widgets, lengthof(_nested_tooltips_widgets)
+	std::begin(_nested_tooltips_widgets), std::end(_nested_tooltips_widgets)
 );
 
 /** Window for displaying a tooltip. */
@@ -676,7 +677,7 @@ struct TooltipsWindow : public Window
 		CLRBITS(this->flags, WF_WHITE_BORDER);
 	}
 
-	Point OnInitialPosition(int16 sm_width, int16 sm_height, int window_number) override
+	Point OnInitialPosition([[maybe_unused]] int16_t sm_width, [[maybe_unused]] int16_t sm_height, [[maybe_unused]] int window_number) override
 	{
 		/* Find the free screen space between the main toolbar at the top, and the statusbar at the bottom.
 		 * Add a fixed distance 2 so the tooltip floats free from both bars.
@@ -696,9 +697,9 @@ struct TooltipsWindow : public Window
 		return pt;
 	}
 
-	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
 	{
-		/* There is only one widget. */
+		if (widget != WID_TT_BACKGROUND) return;
 		CopyInDParam(this->params);
 
 		size->width  = std::min<uint>(GetStringBoundingBox(this->string_id).width, ScaleGUITrad(194));
@@ -709,9 +710,9 @@ struct TooltipsWindow : public Window
 		size->height += WidgetDimensions::scaled.framerect.Vertical()    + WidgetDimensions::scaled.fullbevel.Vertical();
 	}
 
-	void DrawWidget(const Rect &r, int widget) const override
+	void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
-		/* There is only one widget. */
+		if (widget != WID_TT_BACKGROUND) return;
 		GfxFillRect(r, PC_BLACK);
 		GfxFillRect(r.Shrink(WidgetDimensions::scaled.bevel), PC_LIGHT_YELLOW);
 
@@ -759,7 +760,7 @@ void GuiShowTooltips(Window *parent, StringID str, TooltipCloseCondition close_t
 	new TooltipsWindow(parent, str, paramcount, close_tooltip);
 }
 
-void QueryString::HandleEditBox(Window *w, int wid)
+void QueryString::HandleEditBox(Window *w, WidgetID wid)
 {
 	if (w->IsWidgetGloballyFocused(wid) && this->text.HandleCaret()) {
 		w->SetWidgetDirty(wid);
@@ -774,7 +775,7 @@ static int GetCaretWidth()
 	return GetCharacterWidth(FS_NORMAL, '_');
 }
 
-void QueryString::DrawEditBox(const Window *w, int wid) const
+void QueryString::DrawEditBox(const Window *w, WidgetID wid) const
 {
 	const NWidgetLeaf *wi = w->GetWidget<NWidgetLeaf>(wid);
 
@@ -789,7 +790,7 @@ void QueryString::DrawEditBox(const Window *w, int wid) const
 	Rect fr = r.Indent(clearbtn_width, !rtl);
 
 	DrawFrameRect(cr, wi->colour, wi->IsLowered() ? FR_LOWERED : FR_NONE);
-	DrawSpriteIgnorePadding(rtl ? SPR_IMG_DELETE_RIGHT : SPR_IMG_DELETE_LEFT, PAL_NONE, cr, wi->IsLowered(), SA_CENTER);
+	DrawSpriteIgnorePadding(rtl ? SPR_IMG_DELETE_RIGHT : SPR_IMG_DELETE_LEFT, PAL_NONE, cr, SA_CENTER);
 	if (this->text.bytes == 1) GfxFillRect(cr.Shrink(WidgetDimensions::scaled.bevel), _colour_gradient[wi->colour & 0xF][2], FILLRECT_CHECKER);
 
 	DrawFrameRect(fr, wi->colour, FR_LOWERED | FR_DARKENED);
@@ -798,7 +799,7 @@ void QueryString::DrawEditBox(const Window *w, int wid) const
 	fr = fr.Shrink(WidgetDimensions::scaled.framerect);
 	/* Limit the drawing of the string inside the widget boundaries */
 	DrawPixelInfo dpi;
-	if (!FillDrawPixelInfo(&dpi, fr.left, fr.top, fr.Width(), fr.Height())) return;
+	if (!FillDrawPixelInfo(&dpi, fr)) return;
 
 	AutoRestoreBackup dpi_backup(_cur_dpi, &dpi);
 
@@ -826,7 +827,7 @@ void QueryString::DrawEditBox(const Window *w, int wid) const
  * @param wid Widget index.
  * @return Top-left location of the caret, relative to the window.
  */
-Point QueryString::GetCaretPosition(const Window *w, int wid) const
+Point QueryString::GetCaretPosition(const Window *w, WidgetID wid) const
 {
 	const NWidgetLeaf *wi = w->GetWidget<NWidgetLeaf>(wid);
 
@@ -855,7 +856,7 @@ Point QueryString::GetCaretPosition(const Window *w, int wid) const
  * @param to End of the string range.
  * @return Rectangle encompassing the string range, relative to the window.
  */
-Rect QueryString::GetBoundingRect(const Window *w, int wid, const char *from, const char *to) const
+Rect QueryString::GetBoundingRect(const Window *w, WidgetID wid, const char *from, const char *to) const
 {
 	const NWidgetLeaf *wi = w->GetWidget<NWidgetLeaf>(wid);
 
@@ -886,7 +887,7 @@ Rect QueryString::GetBoundingRect(const Window *w, int wid, const char *from, co
  * @param pt Position to test.
  * @return Index of the character position or -1 if no character is at the position.
  */
-ptrdiff_t QueryString::GetCharAtPosition(const Window *w, int wid, const Point &pt) const
+ptrdiff_t QueryString::GetCharAtPosition(const Window *w, WidgetID wid, const Point &pt) const
 {
 	const NWidgetLeaf *wi = w->GetWidget<NWidgetLeaf>(wid);
 
@@ -908,7 +909,7 @@ ptrdiff_t QueryString::GetCharAtPosition(const Window *w, int wid, const Point &
 	return ::GetCharAtPosition(tb->buf, pt.x - delta - r.left);
 }
 
-void QueryString::ClickEditBox(Window *w, Point pt, int wid, int click_count, bool focus_changed)
+void QueryString::ClickEditBox(Window *w, Point pt, WidgetID wid, int click_count, bool focus_changed)
 {
 	const NWidgetLeaf *wi = w->GetWidget<NWidgetLeaf>(wid);
 
@@ -980,7 +981,7 @@ struct QueryStringWindow : public Window
 		this->ReInit();
 	}
 
-	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
 	{
 		if (widget == WID_QS_DEFAULT && (this->flags & QSF_ENABLE_DEFAULT) == 0) {
 			/* We don't want this widget to show! */
@@ -994,7 +995,7 @@ struct QueryStringWindow : public Window
 		}
 	}
 
-	void DrawWidget(const Rect &r, int widget) const override
+	void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
 		if (widget != WID_QS_WARNING) return;
 
@@ -1004,7 +1005,7 @@ struct QueryStringWindow : public Window
 		}
 	}
 
-	void SetStringParameters(int widget) const override
+	void SetStringParameters(WidgetID widget) const override
 	{
 		if (widget == WID_QS_CAPTION) SetDParam(0, this->editbox.caption);
 	}
@@ -1019,7 +1020,7 @@ struct QueryStringWindow : public Window
 		}
 	}
 
-	void OnClick(Point pt, int widget, int click_count) override
+	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
 	{
 		switch (widget) {
 			case WID_QS_DEFAULT:
@@ -1036,7 +1037,7 @@ struct QueryStringWindow : public Window
 		}
 	}
 
-	void Close() override
+	void Close([[maybe_unused]] int data = 0) override
 	{
 		if (!this->editbox.handled && this->parent != nullptr) {
 			Window *parent = this->parent;
@@ -1063,11 +1064,11 @@ static const NWidgetPart _nested_query_string_widgets[] = {
 	EndContainer(),
 };
 
-static WindowDesc _query_string_desc(
-	WDP_CENTER, "query_string", 0, 0,
+static WindowDesc _query_string_desc(__FILE__, __LINE__,
+	WDP_CENTER, nullptr, 0, 0,
 	WC_QUERY_STRING, WC_NONE,
 	0,
-	_nested_query_string_widgets, lengthof(_nested_query_string_widgets)
+	std::begin(_nested_query_string_widgets), std::end(_nested_query_string_widgets)
 );
 
 /**
@@ -1109,13 +1110,13 @@ struct QueryWindow : public Window {
 		this->FinishInitNested(WN_CONFIRM_POPUP_QUERY);
 	}
 
-	void Close() override
+	void Close([[maybe_unused]] int data = 0) override
 	{
 		if (this->proc != nullptr) this->proc(this->parent, false);
 		this->Window::Close();
 	}
 
-	void FindWindowPlacementAndResize(int def_width, int def_height) override
+	void FindWindowPlacementAndResize([[maybe_unused]] int def_width, [[maybe_unused]] int def_height) override
 	{
 		/* Position query window over the calling window, ensuring it's within screen bounds. */
 		this->left = SoftClamp(parent->left + (parent->width / 2) - (this->width / 2), 0, _screen.width - this->width);
@@ -1123,7 +1124,7 @@ struct QueryWindow : public Window {
 		this->SetDirty();
 	}
 
-	void SetStringParameters(int widget) const override
+	void SetStringParameters(WidgetID widget) const override
 	{
 		switch (widget) {
 			case WID_Q_CAPTION:
@@ -1133,7 +1134,7 @@ struct QueryWindow : public Window {
 		}
 	}
 
-	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
 	{
 		if (widget != WID_Q_TEXT) return;
 
@@ -1143,7 +1144,7 @@ struct QueryWindow : public Window {
 		*size = d;
 	}
 
-	void DrawWidget(const Rect &r, int widget) const override
+	void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
 		if (widget != WID_Q_TEXT) return;
 
@@ -1151,7 +1152,7 @@ struct QueryWindow : public Window {
 				this->message, TC_FROMSTRING, SA_CENTER);
 	}
 
-	void OnClick(Point pt, int widget, int click_count) override
+	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
 	{
 		switch (widget) {
 			case WID_Q_YES: {
@@ -1174,7 +1175,7 @@ struct QueryWindow : public Window {
 		}
 	}
 
-	EventState OnKeyPress(WChar key, uint16 keycode) override
+	EventState OnKeyPress([[maybe_unused]] char32_t key, uint16_t keycode) override
 	{
 		/* ESC closes the window, Enter confirms the action */
 		switch (keycode) {
@@ -1210,23 +1211,24 @@ static const NWidgetPart _nested_query_widgets[] = {
 	EndContainer(),
 };
 
-static WindowDesc _query_desc(
+static WindowDesc _query_desc(__FILE__, __LINE__,
 	WDP_CENTER, nullptr, 0, 0,
 	WC_CONFIRM_POPUP_QUERY, WC_NONE,
 	WDF_MODAL,
-	_nested_query_widgets, lengthof(_nested_query_widgets)
+	std::begin(_nested_query_widgets), std::end(_nested_query_widgets)
 );
 
 /**
- * Show a modal confirmation window with standard 'yes' and 'no' buttons
+ * Show a confirmation window with standard 'yes' and 'no' buttons
  * The window is aligned to the centre of its parent.
  * @param caption string shown as window caption
  * @param message string that will be shown for the window
  * @param parent pointer to parent window, if this pointer is nullptr the parent becomes
  * the main window WC_MAIN_WINDOW
  * @param callback callback function pointer to set in the window descriptor
+ * @param focus whether the window should be focussed (by default false)
  */
-void ShowQuery(StringID caption, StringID message, Window *parent, QueryCallbackProc *callback)
+void ShowQuery(StringID caption, StringID message, Window *parent, QueryCallbackProc *callback, bool focus)
 {
 	if (parent == nullptr) parent = GetMainWindow();
 
@@ -1240,5 +1242,6 @@ void ShowQuery(StringID caption, StringID message, Window *parent, QueryCallback
 		break;
 	}
 
-	new QueryWindow(&_query_desc, caption, message, parent, callback);
+	QueryWindow *q = new QueryWindow(&_query_desc, caption, message, parent, callback);
+	if (focus) SetFocusedWindow(q);
 }

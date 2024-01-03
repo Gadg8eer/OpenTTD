@@ -29,7 +29,7 @@ INSTANTIATE_POOL_METHODS(Group)
 
 GroupStatistics::GroupStatistics()
 {
-	this->num_engines = CallocT<uint16>(Engine::GetPoolSize());
+	this->num_engines = CallocT<uint16_t>(Engine::GetPoolSize());
 }
 
 GroupStatistics::~GroupStatistics()
@@ -49,7 +49,7 @@ void GroupStatistics::Clear()
 
 	/* This is also called when NewGRF change. So the number of engines might have changed. Reallocate. */
 	free(this->num_engines);
-	this->num_engines = CallocT<uint16>(Engine::GetPoolSize());
+	this->num_engines = CallocT<uint16_t>(Engine::GetPoolSize());
 }
 
 /**
@@ -275,17 +275,20 @@ const Livery *GetParentLivery(const Group *g)
 
 
 /**
- * Propagate a livery change to a group's children.
- * @param g Group.
+ * Propagate a livery change to a group's children, and optionally update cached vehicle colourmaps.
+ * @param g Group to propagate colours to children.
+ * @param reset_cache Reset colourmap of vehicles in this group.
  */
-void PropagateChildLivery(const Group *g)
+static void PropagateChildLivery(const Group *g, bool reset_cache)
 {
-	/* Company colour data is indirectly cached. */
-	for (Vehicle *v : Vehicle::Iterate()) {
-		if (v->group_id == g->index && (!v->IsGroundVehicle() || v->IsFrontEngine())) {
-			for (Vehicle *u = v; u != nullptr; u = u->Next()) {
-				u->colourmap = PAL_NONE;
-				u->InvalidateNewGRFCache();
+	if (reset_cache) {
+		/* Company colour data is indirectly cached. */
+		for (Vehicle *v : Vehicle::Iterate()) {
+			if (v->group_id == g->index && (!v->IsGroundVehicle() || v->IsFrontEngine())) {
+				for (Vehicle *u = v; u != nullptr; u = u->Next()) {
+					u->colourmap = PAL_NONE;
+					u->InvalidateNewGRFCache();
+				}
 			}
 		}
 	}
@@ -294,11 +297,26 @@ void PropagateChildLivery(const Group *g)
 		if (cg->parent == g->index) {
 			if (!HasBit(cg->livery.in_use, 0)) cg->livery.colour1 = g->livery.colour1;
 			if (!HasBit(cg->livery.in_use, 1)) cg->livery.colour2 = g->livery.colour2;
-			PropagateChildLivery(cg);
+			PropagateChildLivery(cg, reset_cache);
 		}
 	}
 }
 
+/**
+ * Update group liveries for a company. This is called when the LS_DEFAULT scheme is changed, to update groups with
+ * colours set to default.
+ * @param c Company to update.
+ */
+void UpdateCompanyGroupLiveries(const Company *c)
+{
+	for (Group *g : Group::Iterate()) {
+		if (g->owner == c->index && g->parent == INVALID_GROUP) {
+			if (!HasBit(g->livery.in_use, 0)) g->livery.colour1 = c->livery[LS_DEFAULT].colour1;
+			if (!HasBit(g->livery.in_use, 1)) g->livery.colour2 = c->livery[LS_DEFAULT].colour2;
+			PropagateChildLivery(g, false);
+		}
+	}
+}
 
 Group::Group(Owner owner)
 {
@@ -448,12 +466,13 @@ CommandCost CmdAlterGroup(DoCommandFlag flags, AlterGroupMode mode, GroupID grou
 			g->parent = (pg == nullptr) ? INVALID_GROUP : pg->index;
 			GroupStatistics::UpdateAutoreplace(g->owner);
 
-			if (g->livery.in_use == 0) {
+			if (!HasBit(g->livery.in_use, 0) || !HasBit(g->livery.in_use, 1)) {
+				/* Update livery with new parent's colours if either colour is default. */
 				const Livery *livery = GetParentLivery(g);
-				g->livery.colour1 = livery->colour1;
-				g->livery.colour2 = livery->colour2;
+				if (!HasBit(g->livery.in_use, 0)) g->livery.colour1 = livery->colour1;
+				if (!HasBit(g->livery.in_use, 1)) g->livery.colour2 = livery->colour2;
 
-				PropagateChildLivery(g);
+				PropagateChildLivery(g, true);
 				MarkWholeScreenDirty();
 			}
 		}
@@ -661,7 +680,7 @@ CommandCost CmdSetGroupLivery(DoCommandFlag flags, GroupID group_id, bool primar
 			g->livery.colour2 = colour;
 		}
 
-		PropagateChildLivery(g);
+		PropagateChildLivery(g, true);
 		MarkWholeScreenDirty();
 	}
 
@@ -713,19 +732,6 @@ CommandCost CmdSetGroupFlag(DoCommandFlag flags, GroupID group_id, GroupFlags fl
 
 	return CommandCost();
 }
-
-/**
- * Decrease the num_vehicle variable before delete an front engine from a group
- * @note Called in CmdSellRailWagon and DeleteLasWagon,
- * @param v     FrontEngine of the train we want to remove.
- */
-void RemoveVehicleFromGroup(const Vehicle *v)
-{
-	if (!v->IsPrimaryVehicle()) return;
-
-	if (!IsDefaultGroupID(v->group_id)) GroupStatistics::CountVehicle(v, -1);
-}
-
 
 /**
  * Affect the groupID of a train to new_g.

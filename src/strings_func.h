@@ -15,6 +15,7 @@
 #include "gfx_type.h"
 #include "core/bitmath_func.hpp"
 #include "core/span_type.hpp"
+#include "core/strong_typedef_type.hpp"
 #include "vehicle_type.h"
 
 /**
@@ -71,16 +72,28 @@ uint ConvertDisplaySpeedToKmhishSpeed(uint speed, VehicleType type);
  * @param type Type of vehicle for parameter.
  * @return Bit-packed velocity and vehicle type, for use with SetDParam().
  */
-static inline int64 PackVelocity(uint speed, VehicleType type)
+static inline int64_t PackVelocity(uint speed, VehicleType type)
 {
 	/* Vehicle type is a byte, so packed into the top 8 bits of the 64-bit
 	 * parameter, although only values from 0-3 are relevant. */
-	return speed | (static_cast<uint64>(type) << 56);
+	return speed | (static_cast<uint64_t>(type) << 56);
 }
 
 void SetDParam(size_t n, uint64_t v);
 void SetDParamMaxValue(size_t n, uint64_t max_value, uint min_count = 0, FontSize size = FS_NORMAL);
 void SetDParamMaxDigits(size_t n, uint count, FontSize size = FS_NORMAL);
+
+template <typename T, std::enable_if_t<std::is_base_of<StrongTypedefBase, T>::value, int> = 0>
+void SetDParam(size_t n, T v)
+{
+	SetDParam(n, v.base());
+}
+
+template <typename T, std::enable_if_t<std::is_base_of<StrongTypedefBase, T>::value, int> = 0>
+void SetDParamMaxValue(size_t n, T max_value, uint min_count = 0, FontSize size = FS_NORMAL)
+{
+	SetDParamMaxValue(n, max_value.base(), min_count, size);
+}
 
 void SetDParamStr(size_t n, const char *str);
 void SetDParamStr(size_t n, const std::string &str);
@@ -96,8 +109,6 @@ extern TextDirection _current_text_dir; ///< Text direction of the currently sel
 
 void InitializeLanguagePacks();
 const char *GetCurrentLanguageIsoCode();
-
-bool StringIDSorter(const StringID &a, const StringID &b);
 
 /**
  * A searcher for missing glyphs.

@@ -39,7 +39,7 @@ static const uint ICON_BOTTOM_BORDERWIDTH = 12;
 struct IConsoleLine {
 	std::string buffer;     ///< The data to store.
 	TextColour colour;      ///< The colour of the line.
-	uint16 time;            ///< The amount of time the line is in the backlog.
+	uint16_t time;            ///< The amount of time the line is in the backlog.
 
 	IConsoleLine() : buffer(), colour(TC_BEGIN), time(0)
 	{
@@ -102,11 +102,11 @@ static const struct NWidgetPart _nested_console_window_widgets[] = {
 	NWidget(WWT_EMPTY, INVALID_COLOUR, WID_C_BACKGROUND), SetResize(1, 1),
 };
 
-static WindowDesc _console_window_desc(
+static WindowDesc _console_window_desc(__FILE__, __LINE__,
 	WDP_MANUAL, nullptr, 0, 0,
 	WC_CONSOLE, WC_NONE,
 	0,
-	_nested_console_window_widgets, lengthof(_nested_console_window_widgets)
+	std::begin(_nested_console_window_widgets), std::end(_nested_console_window_widgets)
 );
 
 struct IConsoleWindow : Window
@@ -125,11 +125,11 @@ struct IConsoleWindow : Window
 
 	void OnInit() override
 	{
-		this->line_height = FONT_HEIGHT_NORMAL + WidgetDimensions::scaled.hsep_normal;
+		this->line_height = GetCharacterHeight(FS_NORMAL) + WidgetDimensions::scaled.hsep_normal;
 		this->line_offset = GetStringBoundingBox("] ").width + WidgetDimensions::scaled.frametext.left;
 	}
 
-	void Close() override
+	void Close([[maybe_unused]] int data = 0) override
 	{
 		_iconsole_mode = ICONSOLE_CLOSED;
 		VideoDriver::GetInstance()->EditBoxLostFocus();
@@ -200,7 +200,7 @@ struct IConsoleWindow : Window
 		if (_iconsole_cmdline.HandleCaret()) this->SetDirty();
 	}
 
-	EventState OnKeyPress(WChar key, uint16 keycode) override
+	EventState OnKeyPress([[maybe_unused]] char32_t key, uint16_t keycode) override
 	{
 		if (_focused_window != this) return ES_NOT_HANDLED;
 
@@ -271,7 +271,7 @@ struct IConsoleWindow : Window
 		return ES_HANDLED;
 	}
 
-	void InsertTextString(int wid, const char *str, bool marked, const char *caret, const char *insert_location, const char *replacement_end) override
+	void InsertTextString(WidgetID, const char *str, bool marked, const char *caret, const char *insert_location, const char *replacement_end) override
 	{
 		if (_iconsole_cmdline.InsertString(str, marked, caret, insert_location, replacement_end)) {
 			IConsoleWindow::scroll = 0;
@@ -280,22 +280,9 @@ struct IConsoleWindow : Window
 		}
 	}
 
-	const char *GetFocusedText() const override
+	Textbuf *GetFocusedTextbuf() const override
 	{
-		return _iconsole_cmdline.buf;
-	}
-
-	const char *GetCaret() const override
-	{
-		return _iconsole_cmdline.buf + _iconsole_cmdline.caretpos;
-	}
-
-	const char *GetMarkedText(size_t *length) const override
-	{
-		if (_iconsole_cmdline.markend == 0) return nullptr;
-
-		*length = _iconsole_cmdline.markend - _iconsole_cmdline.markpos;
-		return _iconsole_cmdline.buf + _iconsole_cmdline.markpos;
+		return &_iconsole_cmdline;
 	}
 
 	Point GetCaretPosition() const override
@@ -311,7 +298,7 @@ struct IConsoleWindow : Window
 		int delta = std::min<int>(this->width - this->line_offset - _iconsole_cmdline.pixels - ICON_RIGHT_BORDERWIDTH, 0);
 
 		Point p1 = GetCharPosInString(_iconsole_cmdline.buf, from, FS_NORMAL);
-		Point p2 = from != to ? GetCharPosInString(_iconsole_cmdline.buf, from) : p1;
+		Point p2 = from != to ? GetCharPosInString(_iconsole_cmdline.buf, to, FS_NORMAL) : p1;
 
 		Rect r = {this->line_offset + delta + p1.x, this->height - this->line_height, this->line_offset + delta + p2.x, this->height};
 		return r;
@@ -336,7 +323,7 @@ struct IConsoleWindow : Window
 		VideoDriver::GetInstance()->EditBoxGainedFocus();
 	}
 
-	void OnFocusLost(bool closing) override
+	void OnFocusLost(bool) override
 	{
 		VideoDriver::GetInstance()->EditBoxLostFocus();
 	}
@@ -470,7 +457,7 @@ void IConsoleGUIPrint(TextColour colour_code, const std::string &str)
  * all lines in the buffer are aged by one. When a line exceeds both the maximum position
  * and also the maximum age, it gets removed.
  * @return true if any lines were removed
-*/
+ */
 static bool TruncateBuffer()
 {
 	bool need_truncation = false;

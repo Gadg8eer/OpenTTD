@@ -8,6 +8,7 @@
 /** @file error_gui.cpp GUI related to errors. */
 
 #include "stdafx.h"
+#include "core/geometry_func.hpp"
 #include "core/mem_func.hpp"
 #include "landscape.h"
 #include "newgrf_text.h"
@@ -42,11 +43,11 @@ static const NWidgetPart _nested_errmsg_widgets[] = {
 	EndContainer(),
 };
 
-static WindowDesc _errmsg_desc(
-	WDP_MANUAL, "error", 0, 0,
+static WindowDesc _errmsg_desc(__FILE__, __LINE__,
+	WDP_MANUAL, nullptr, 0, 0,
 	WC_ERRMSG, WC_NONE,
 	0,
-	_nested_errmsg_widgets, lengthof(_nested_errmsg_widgets)
+	std::begin(_nested_errmsg_widgets), std::end(_nested_errmsg_widgets)
 );
 
 static const NWidgetPart _nested_errmsg_face_widgets[] = {
@@ -62,11 +63,11 @@ static const NWidgetPart _nested_errmsg_face_widgets[] = {
 	EndContainer(),
 };
 
-static WindowDesc _errmsg_face_desc(
-	WDP_MANUAL, "error_face", 0, 0,
+static WindowDesc _errmsg_face_desc(__FILE__, __LINE__,
+	WDP_MANUAL, nullptr, 0, 0,
 	WC_ERRMSG, WC_NONE,
 	0,
-	_nested_errmsg_face_widgets, lengthof(_nested_errmsg_face_widgets)
+	std::begin(_nested_errmsg_face_widgets), std::end(_nested_errmsg_face_widgets)
 );
 
 /**
@@ -88,11 +89,11 @@ ErrorMessageData::ErrorMessageData(const ErrorMessageData &data) :
  * @param x            World X position (TileVirtX) of the error location. Set both x and y to 0 to just center the message when there is no related error tile.
  * @param y            World Y position (TileVirtY) of the error location. Set both x and y to 0 to just center the message when there is no related error tile.
  * @param textref_stack_grffile NewGRF that provides the #TextRefStack for the error message.
- * @param textref_stack_size Number of uint32 values to put on the #TextRefStack for the error message; 0 if the #TextRefStack shall not be used.
+ * @param textref_stack_size Number of uint32_t values to put on the #TextRefStack for the error message; 0 if the #TextRefStack shall not be used.
  * @param textref_stack Values to put on the #TextRefStack.
  * @param extra_msg    Extra error message showed in third line. Can be INVALID_STRING_ID.
  */
-ErrorMessageData::ErrorMessageData(StringID summary_msg, StringID detailed_msg, bool is_critical, int x, int y, const GRFFile *textref_stack_grffile, uint textref_stack_size, const uint32 *textref_stack, StringID extra_msg) :
+ErrorMessageData::ErrorMessageData(StringID summary_msg, StringID detailed_msg, bool is_critical, int x, int y, const GRFFile *textref_stack_grffile, uint textref_stack_size, const uint32_t *textref_stack, StringID extra_msg) :
 	is_critical(is_critical),
 	textref_stack_grffile(textref_stack_grffile),
 	textref_stack_size(textref_stack_size),
@@ -131,7 +132,7 @@ void ErrorMessageData::CopyOutDParams()
  * @param n Parameter index
  * @param v Parameter value
  */
-void ErrorMessageData::SetDParam(uint n, uint64 v)
+void ErrorMessageData::SetDParam(uint n, uint64_t v)
 {
 	if (n >= this->params.size()) this->params.resize(n + 1);
 	this->params[n] = v;
@@ -188,7 +189,7 @@ public:
 		}
 	}
 
-	void UpdateWidgetSize(int widget, Dimension *size, const Dimension &padding, Dimension *fill, Dimension *resize) override
+	void UpdateWidgetSize(WidgetID widget, Dimension *size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension *fill, [[maybe_unused]] Dimension *resize) override
 	{
 		switch (widget) {
 			case WID_EM_MESSAGE: {
@@ -208,16 +209,13 @@ public:
 				size->height = std::max(size->height, panel_height);
 				break;
 			}
-			case WID_EM_FACE: {
-				Dimension face_size = GetScaledSpriteSize(SPR_GRADIENT);
-				size->width = std::max(size->width, face_size.width);
-				size->height = std::max(size->height, face_size.height);
+			case WID_EM_FACE:
+				*size = maxdim(*size, GetScaledSpriteSize(SPR_GRADIENT));
 				break;
-			}
 		}
 	}
 
-	Point OnInitialPosition(int16 sm_width, int16 sm_height, int window_number) override
+	Point OnInitialPosition([[maybe_unused]] int16_t sm_width, [[maybe_unused]] int16_t sm_height, [[maybe_unused]] int window_number) override
 	{
 		/* Position (0, 0) given, center the window. */
 		if (this->position.x == 0 && this->position.y == 0) {
@@ -253,18 +251,18 @@ public:
 	 * @param data Information about the changed data.
 	 * @param gui_scope Whether the call is done from GUI scope. You may not do everything when not in GUI scope. See #InvalidateWindowData() for details.
 	 */
-	void OnInvalidateData(int data = 0, bool gui_scope = true) override
+	void OnInvalidateData([[maybe_unused]] int data = 0, [[maybe_unused]] bool gui_scope = true) override
 	{
 		/* If company gets shut down, while displaying an error about it, remove the error message. */
 		if (this->face != INVALID_COMPANY && !Company::IsValidID(this->face)) this->Close();
 	}
 
-	void SetStringParameters(int widget) const override
+	void SetStringParameters(WidgetID widget) const override
 	{
 		if (widget == WID_EM_CAPTION) CopyInDParam(this->params);
 	}
 
-	void DrawWidget(const Rect &r, int widget) const override
+	void DrawWidget(const Rect &r, WidgetID widget) const override
 	{
 		switch (widget) {
 			case WID_EM_FACE: {
@@ -313,7 +311,7 @@ public:
 		if (_right_button_down && !this->is_critical) this->Close();
 	}
 
-	void Close() override
+	void Close([[maybe_unused]] int data = 0) override
 	{
 		SetRedErrorSquare(INVALID_TILE);
 		if (_window_system_initialized) ShowFirstError();
@@ -385,11 +383,11 @@ void ShowErrorMessage(StringID summary_msg, int x, int y, CommandCost cc)
  * @param x            World X position (TileVirtX) of the error location. Set both x and y to 0 to just center the message when there is no related error tile.
  * @param y            World Y position (TileVirtY) of the error location. Set both x and y to 0 to just center the message when there is no related error tile.
  * @param textref_stack_grffile NewGRF providing the #TextRefStack for the error message.
- * @param textref_stack_size Number of uint32 values to put on the #TextRefStack for the error message; 0 if the #TextRefStack shall not be used.
+ * @param textref_stack_size Number of uint32_t values to put on the #TextRefStack for the error message; 0 if the #TextRefStack shall not be used.
  * @param textref_stack Values to put on the #TextRefStack.
  * @param extra_msg    Extra error message shown in third line. Can be INVALID_STRING_ID.
  */
-void ShowErrorMessage(StringID summary_msg, StringID detailed_msg, WarningLevel wl, int x, int y, const GRFFile *textref_stack_grffile, uint textref_stack_size, const uint32 *textref_stack, StringID extra_msg)
+void ShowErrorMessage(StringID summary_msg, StringID detailed_msg, WarningLevel wl, int x, int y, const GRFFile *textref_stack_grffile, uint textref_stack_size, const uint32_t *textref_stack, StringID extra_msg)
 {
 	assert(textref_stack_size == 0 || (textref_stack_grffile != nullptr && textref_stack != nullptr));
 	if (summary_msg == STR_NULL) summary_msg = STR_EMPTY;
@@ -444,7 +442,8 @@ void ShowErrorMessage(StringID summary_msg, StringID detailed_msg, WarningLevel 
  * Close active error message window
  * @return true if a window was closed.
  */
-bool HideActiveErrorMessage() {
+bool HideActiveErrorMessage()
+{
 	ErrmsgWindow *w = (ErrmsgWindow*)FindWindowById(WC_ERRMSG, 0);
 	if (w == nullptr) return false;
 	w->Close();

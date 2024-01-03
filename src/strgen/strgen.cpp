@@ -79,7 +79,7 @@ struct FileStringReader : StringReader {
 	 * @param translation Are we reading a translation?
 	 */
 	FileStringReader(StringData &data, const std::filesystem::path &file, bool master, bool translation) :
-			StringReader(data, file.generic_string().c_str(), master, translation)
+			StringReader(data, file.generic_string(), master, translation)
 	{
 		this->input_stream.open(file, std::ifstream::binary);
 	}
@@ -136,14 +136,14 @@ void FileStringReader::HandlePragma(char *str)
 		if (langid > (long)UINT16_MAX || langid < 0) {
 			FatalError("Invalid winlangid {}", buf);
 		}
-		_lang.winlangid = (uint16)langid;
+		_lang.winlangid = (uint16_t)langid;
 	} else if (!memcmp(str, "grflangid ", 10)) {
 		const char *buf = str + 10;
 		long langid = std::strtol(buf, nullptr, 16);
 		if (langid >= 0x7F || langid < 0) {
 			FatalError("Invalid grflangid {}", buf);
 		}
-		_lang.newgrflangid = (uint8)langid;
+		_lang.newgrflangid = (uint8_t)langid;
 	} else if (!memcmp(str, "gender ", 7)) {
 		if (this->master) FatalError("Genders are not allowed in the base translation.");
 		char *buf = str + 7;
@@ -238,7 +238,7 @@ struct HeaderFileWriter : HeaderWriter, FileWriter {
 		this->output_stream << "#define TABLE_STRINGS_H\n";
 	}
 
-	void WriteStringID(const std::string &name, int stringid)
+	void WriteStringID(const std::string &name, int stringid) override
 	{
 		if (prev + 1 != stringid) this->output_stream << "\n";
 		fmt::print(this->output_stream, "static const StringID {} = 0x{:X};\n", name, stringid);
@@ -246,7 +246,7 @@ struct HeaderFileWriter : HeaderWriter, FileWriter {
 		total_strings++;
 	}
 
-	void Finalise(const StringData &data)
+	void Finalise(const StringData &data) override
 	{
 		/* Find the plural form with the most amount of cases. */
 		int max_plural_forms = 0;
@@ -293,18 +293,18 @@ struct LanguageFileWriter : LanguageWriter, FileWriter {
 	{
 	}
 
-	void WriteHeader(const LanguagePackHeader *header)
+	void WriteHeader(const LanguagePackHeader *header) override
 	{
 		this->Write((const byte *)header, sizeof(*header));
 	}
 
-	void Finalise()
+	void Finalise() override
 	{
 		this->output_stream.put(0);
 		this->FileWriter::Finalise();
 	}
 
-	void Write(const byte *buffer, size_t length)
+	void Write(const byte *buffer, size_t length) override
 	{
 		this->output_stream.write((const char *)buffer, length);
 	}

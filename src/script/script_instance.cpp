@@ -46,7 +46,7 @@ ScriptStorage::~ScriptStorage()
 static void PrintFunc(bool error_msg, const std::string &message)
 {
 	/* Convert to OpenTTD internal capable string */
-	ScriptController::Print(error_msg, message.c_str());
+	ScriptController::Print(error_msg, message);
 }
 
 ScriptInstance::ScriptInstance(const char *APIName) :
@@ -76,6 +76,10 @@ void ScriptInstance::Initialize(const std::string &main_script, const std::strin
 	/* Register the API functions and classes */
 	this->engine->SetGlobalPointer(this->engine);
 	this->RegisterAPI();
+	if (this->IsDead()) {
+		/* Failed to register API; a message has already been logged. */
+		return;
+	}
 
 	try {
 		ScriptObject::SetAllowDoCommand(false);
@@ -324,7 +328,7 @@ ScriptLogTypes::LogData &ScriptInstance::GetLogData()
  * First 1 byte indicating if there is a data blob at all.
  * 1 byte indicating the type of data.
  * The data itself, this differs per type:
- *  - integer: a binary representation of the integer (int32).
+ *  - integer: a binary representation of the integer (int32_t).
  *  - string:  First one byte with the string length, then a 0-terminated char
  *             array. The string can't be longer than 255 bytes (including
  *             terminating '\0').
@@ -363,7 +367,7 @@ static const SaveLoad _script_byte[] = {
 			SQInteger res;
 			sq_getinteger(vm, index, &res);
 			if (!test) {
-				int64 value = (int64)res;
+				int64_t value = (int64_t)res;
 				SlCopy(&value, 1, SLE_INT64);
 			}
 			return true;
@@ -563,7 +567,7 @@ bool ScriptInstance::IsPaused()
 	SlObject(nullptr, _script_byte);
 	switch (_script_sl_byte) {
 		case SQSL_INT: {
-			int64 value;
+			int64_t value;
 			SlCopy(&value, 1, IsSavegameVersionBefore(SLV_SCRIPT_INT64) ? SLE_FILE_I32 | SLE_VAR_I64 : SLE_INT64);
 			if (data != nullptr) data->push_back((SQInteger)value);
 			return true;

@@ -19,7 +19,7 @@ struct StringParameter {
 	uint64_t data; ///< The data of the parameter.
 	const char *string_view; ///< The string value, if it has any.
 	std::unique_ptr<std::string> string; ///< Copied string value, if it has any.
-	WChar type; ///< The #StringControlCode to interpret this data with when it's the first parameter, otherwise '\0'.
+	char32_t type; ///< The #StringControlCode to interpret this data with when it's the first parameter, otherwise '\0'.
 };
 
 class StringParameters {
@@ -28,7 +28,7 @@ protected:
 	span<StringParameter> parameters = {}; ///< Array with the actual parameters.
 
 	size_t offset = 0; ///< Current offset in the parameters span.
-	WChar next_type = 0; ///< The type of the next data that is retrieved.
+	char32_t next_type = 0; ///< The type of the next data that is retrieved.
 
 	StringParameters(span<StringParameter> parameters = {}) :
 		parameters(parameters)
@@ -54,7 +54,7 @@ public:
 	}
 
 	void PrepareForNextRun();
-	void SetTypeOfNextParameter(WChar type) { this->next_type = type; }
+	void SetTypeOfNextParameter(char32_t type) { this->next_type = type; }
 
 	/**
 	 * Get the current offset, so it can be backed up for certain processing
@@ -129,7 +129,7 @@ public:
 	 */
 	StringParameters GetRemainingParameters(size_t offset)
 	{
-		return StringParameters(this->parameters.subspan(this->offset, GetDataLeft()));
+		return StringParameters(this->parameters.subspan(offset, this->parameters.size() - offset));
 	}
 
 	/** Return the amount of elements which can still be read. */
@@ -139,18 +139,24 @@ public:
 	}
 
 	/** Get the type of a specific element. */
-	WChar GetTypeAtOffset(size_t offset) const
+	char32_t GetTypeAtOffset(size_t offset) const
 	{
 		assert(offset < this->parameters.size());
 		return this->parameters[offset].type;
 	}
 
-	void SetParam(size_t n, uint64 v)
+	void SetParam(size_t n, uint64_t v)
 	{
 		assert(n < this->parameters.size());
 		this->parameters[n].data = v;
 		this->parameters[n].string.reset();
 		this->parameters[n].string_view = nullptr;
+	}
+
+	template <typename T, std::enable_if_t<std::is_base_of<StrongTypedefBase, T>::value, int> = 0>
+	void SetParam(size_t n, T v)
+	{
+		SetParam(n, v.base());
 	}
 
 	void SetParam(size_t n, const char *str)
@@ -171,7 +177,7 @@ public:
 		this->parameters[n].string_view = nullptr;
 	}
 
-	uint64 GetParam(size_t n) const
+	uint64_t GetParam(size_t n) const
 	{
 		assert(n < this->parameters.size());
 		assert(this->parameters[n].string_view == nullptr && this->parameters[n].string == nullptr);
@@ -192,17 +198,35 @@ public:
 };
 
 /**
- * Extension of StringParameters with its own statically allocated buffer for
+ * Extension of StringParameters with its own statically sized buffer for
  * the parameters.
  */
-class AllocatedStringParameters : public StringParameters {
-	std::vector<StringParameter> params; ///< The actual parameters
+template <size_t N>
+class ArrayStringParameters : public StringParameters {
+	std::array<StringParameter, N> params{}; ///< The actual parameters
 
 public:
-	AllocatedStringParameters(size_t parameters = 0) : params(parameters)
+	ArrayStringParameters()
 	{
 		this->parameters = span(params.data(), params.size());
 	}
+
+	ArrayStringParameters(ArrayStringParameters&& other) noexcept
+	{
+		*this = std::move(other);
+	}
+
+	ArrayStringParameters& operator=(ArrayStringParameters &&other) noexcept
+	{
+		this->offset = other.offset;
+		this->next_type = other.next_type;
+		this->params = std::move(other.params);
+		this->parameters = span(params.data(), params.size());
+		return *this;
+	}
+
+	ArrayStringParameters(const ArrayStringParameters& other) = delete;
+	ArrayStringParameters& operator=(const ArrayStringParameters &other) = delete;
 };
 
 /**
@@ -214,7 +238,7 @@ public:
 template <typename... Args>
 static auto MakeParameters(const Args&... args)
 {
-	AllocatedStringParameters parameters(sizeof...(args));
+	ArrayStringParameters<sizeof...(args)> parameters;
 	size_t index = 0;
 	(parameters.SetParam(index++, std::forward<const Args&>(args)), ...);
 	return parameters;
@@ -285,7 +309,7 @@ public:
 	 * Encode the given Utf8 character into the output buffer.
 	 * @param c The character to encode.
 	 */
-	void Utf8Encode(WChar c)
+	void Utf8Encode(char32_t c)
 	{
 		auto iterator = std::back_inserter(*this->string);
 		::Utf8Encode(iterator, c);
@@ -326,7 +350,7 @@ std::string GetStringWithArgs(StringID string, StringParameters &args);
 /* Do not leak the StringBuilder to everywhere. */
 void GenerateTownNameString(StringBuilder &builder, size_t lang, uint32_t seed);
 void GetTownName(StringBuilder &builder, const struct Town *t);
-void GRFTownNameGenerate(StringBuilder &builder, uint32 grfid, uint16 gen, uint32 seed);
+void GRFTownNameGenerate(StringBuilder &builder, uint32_t grfid, uint16_t gen, uint32_t seed);
 
 uint RemapNewGRFStringControlCode(uint scc, const char **str, StringParameters &parameters, bool modify_parameters);
 

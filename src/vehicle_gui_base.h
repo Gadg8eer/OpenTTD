@@ -19,7 +19,7 @@
 #include "window_gui.h"
 #include "widgets/dropdown_type.h"
 
-typedef GUIList<const Vehicle*, CargoID> GUIVehicleList;
+typedef GUIList<const Vehicle*, std::nullptr_t, CargoID> GUIVehicleList;
 
 struct GUIVehicleGroup {
 	VehicleList::const_iterator vehicles_begin;    ///< Pointer to beginning element of this vehicle group.
@@ -62,7 +62,7 @@ struct GUIVehicleGroup {
 	}
 };
 
-typedef GUIList<GUIVehicleGroup, CargoID> GUIVehicleGroupList;
+typedef GUIList<GUIVehicleGroup, std::nullptr_t, CargoID> GUIVehicleGroupList;
 
 struct BaseVehicleListWindow : public Window {
 
@@ -88,10 +88,9 @@ struct BaseVehicleListWindow : public Window {
 	Scrollbar *vscroll;
 	VehicleListIdentifier vli;                  ///< Identifier of the vehicle list we want to currently show.
 	VehicleID vehicle_sel;                      ///< Selected vehicle
-	CargoID cargo_filter[NUM_CARGO + 3];        ///< Available cargo filters; CargoID or CF_ANY or CF_FREIGHT or CF_NONE
-	StringID cargo_filter_texts[NUM_CARGO + 4]; ///< Texts for filter_cargo, terminated by INVALID_STRING_ID
-	byte cargo_filter_criteria;                 ///< Selected cargo filter index
+	CargoID cargo_filter_criteria;              ///< Selected cargo filter index
 	uint order_arrow_width;                     ///< Width of the arrow in the small order list.
+	CargoTypes used_cargoes;
 
 	typedef GUIVehicleGroupList::SortFunction VehicleGroupSortFunction;
 	typedef GUIVehicleList::SortFunction VehicleIndividualSortFunction;
@@ -122,9 +121,11 @@ struct BaseVehicleListWindow : public Window {
 	void UpdateVehicleGroupBy(GroupBy group_by);
 	void SortVehicleList();
 	void BuildVehicleList();
-	void SetCargoFilterIndex(byte index);
+	void SetCargoFilter(byte index);
 	void SetCargoFilterArray();
 	void FilterVehicleList();
+	StringID GetCargoFilterLabel(CargoID cid) const;
+	DropDownList BuildCargoDropDownList(bool full) const;
 	Dimension GetActionDropdownSize(bool show_autoreplace, bool show_group, bool show_create);
 	DropDownList BuildActionDropdownList(bool show_autoreplace, bool show_group, bool show_create);
 
